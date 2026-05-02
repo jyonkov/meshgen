@@ -79,6 +79,7 @@ class MeshGenPreferences(bpy.types.AddonPreferences):
                 ("ollama", "Ollama", "Use an Ollama server for inference"),
                 ("anthropic", "Anthropic", "Use the Anthropic API for inference"),
                 ("openai", "OpenAI", "Use the OpenAI API for inference"),
+                ("deepseek", "DeepSeek", "Use the DeepSeek API for inference"),
             ],
             default="huggingface",
             update=reset_backend,
@@ -137,6 +138,19 @@ class MeshGenPreferences(bpy.types.AddonPreferences):
         "openai_api_key": bpy.props.StringProperty(
             name="API key",
             description="OpenAI API key",
+            default="",
+            subtype="PASSWORD",
+            update=reset_backend,
+        ),
+        "deepseek_model_id": bpy.props.StringProperty(
+            name="Model ID",
+            description="ID of the model to use",
+            default="deepseek-chat",
+            update=reset_backend,
+        ),
+        "deepseek_api_key": bpy.props.StringProperty(
+            name="API key",
+            description="DeepSeek API key",
             default="",
             subtype="PASSWORD",
             update=reset_backend,
@@ -290,6 +304,21 @@ class MeshGenPreferences(bpy.types.AddonPreferences):
 
                 remote_box.prop(self, "openai_model_id")
                 remote_box.prop(self, "openai_api_key")
+
+            elif self.llm_provider == "deepseek":
+                info_box = remote_box.box()
+                info_box.label(text="Run models with the DeepSeek API.", icon="INFO")
+                col = info_box.column(align=True)
+                col.label(text="1. Create an account on platform.deepseek.com")
+                col.label(
+                    text="2. Go to platform.deepseek.com/api_keys and create a new key"
+                )
+                col.label(text="3. Paste the key into the API key field")
+
+                remote_box.separator()
+
+                remote_box.prop(self, "deepseek_model_id")
+                remote_box.prop(self, "deepseek_api_key")
 
         options_box = layout.box()
         header = options_box.row(align=True)

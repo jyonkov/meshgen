@@ -49,6 +49,11 @@ class Backend:
                     and prefs.openai_model_id
                     and prefs.openai_api_key
                 )
+                or (
+                    prefs.llm_provider == "deepseek"
+                    and prefs.deepseek_model_id
+                    and prefs.deepseek_api_key
+                )
             )
 
     def is_loaded(self):
@@ -93,6 +98,10 @@ class Backend:
             model_id = prefs.openai_model_id
             api_base = None
             api_key = prefs.openai_api_key
+        elif prefs.llm_provider == "deepseek":
+            model_id = f"deepseek/{prefs.deepseek_model_id}"
+            api_base = None
+            api_key = prefs.deepseek_api_key
         else:
             raise ValueError(f"Unknown provider: {prefs.llm_provider}")
 
@@ -130,6 +139,7 @@ class Backend:
                 prefs.llm_provider == "ollama"
                 or prefs.llm_provider == "anthropic"
                 or prefs.llm_provider == "openai"
+                or prefs.llm_provider == "deepseek"
             ):
                 self._load_litellm_model()
             else:
