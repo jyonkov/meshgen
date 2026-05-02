@@ -1,3 +1,6 @@
+import ast
+import contextlib
+import io
 import queue
 import threading
 import traceback
@@ -7,6 +10,65 @@ from smolagents import CodeAgent, HfApiModel, LiteLLMModel, LogLevel
 
 from .tools import ToolManager
 from .utils import get_available_models, get_models_dir
+
+
+class _FinalAnswer(Exception):
+    def __init__(self, value):
+        self.value = value
+
+
+class UnhingedExecutor:
+    """Raw exec() executor — no AST checks, no import filter, no operator gating."""
+
+    def __init__(self):
+        self.state = {}
+        self.static_tools = {}
+        self.custom_tools = {}
+
+    def send_variables(self, variables):
+        self.state.update(variables)
+
+    def send_tools(self, tools):
+        self.static_tools = dict(tools)
+
+    def __call__(self, code_action):
+        def _final_answer(value=None):
+            raise _FinalAnswer(value)
+
+        namespace = {
+            **self.state,
+            **self.static_tools,
+            "final_answer": _final_answer,
+            "__builtins__": __builtins__,
+        }
+
+        tree = ast.parse(code_action, mode="exec")
+        last_expr = (
+            tree.body.pop()
+            if (tree.body and isinstance(tree.body[-1], ast.Expr))
+            else None
+        )
+
+        buf = io.StringIO()
+        output, is_final_answer = None, False
+        try:
+            with contextlib.redirect_stdout(buf):
+                exec(compile(tree, "<agent>", "exec"), namespace)
+                if last_expr is not None:
+                    output = eval(
+                        compile(ast.Expression(last_expr.value), "<agent>", "eval"),
+                        namespace,
+                    )
+        except _FinalAnswer as fa:
+            output = fa.value
+            is_final_answer = True
+
+        for k, v in namespace.items():
+            if k == "__builtins__" or k == "final_answer" or k in self.static_tools:
+                continue
+            self.state[k] = v
+
+        return output, buf.getvalue(), is_final_answer
 
 
 class Backend:
@@ -150,20 +212,11 @@ class Backend:
         self.agent = CodeAgent(
             model=self.model,
             tools=ToolManager.instance().tools,
-            additional_authorized_imports=[
-                "array",
-                "copy",
-                "dataclasses",
-                "decimal",
-                "enum",
-                "functools",
-                "json",
-                "pathlib",
-                "typing",
-            ],
+            additional_authorized_imports=["*"],
             add_base_tools=False,
             verbosity_level=LogLevel.DEBUG,
         )
+        self.agent.python_executor = UnhingedExecutor()
 
     def start_chat_completion(self, messages, temperature, stop_event):
         prompt = next((msg["content"] for msg in messages if msg["role"] == "user"), "")
